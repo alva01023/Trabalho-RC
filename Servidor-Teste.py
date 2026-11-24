@@ -75,41 +75,40 @@ def verificar_entrada_valida(letra_tentativa):
         return 0
 
     if not("a" <= letra_tentativa <= "z"):
-        print("Insira uma letra válida.\n")
         return 0
     return letra_tentativa
 
-def enviar_cliente(connectionSocket, conteudo):
+def enviar_cliente(socket_conexao, conteudo):
     conteudo += "\n"
     imprimir_depuracao(f"DEPURAÇÃO: Função executada: enviar_cliente. Argumento: \n   - {conteudo}")
-    connectionSocket.sendall(conteudo.encode('utf-8'))    
+    socket_conexao.sendall(conteudo.encode('utf-8'))    
 
-def pacote_indexador(connectionSocket, mensagem):
+def pacote_indexador(socket_conexao, mensagem):
     """bool cliente e int servidor"""
     imprimir_depuracao("DEPURAÇÃO: Tratando pacote do tipo indexador.")
 
     try:
         indexador = int(mensagem)
     except:
-        enviar_cliente(connectionSocket, "0")
+        enviar_cliente(socket_conexao, "0")
         return -1
 
     if(indexador <= 0):
         indexador *= -1
     indexador %= len(lista_palavras)
 
-    enviar_cliente(connectionSocket, "1")
+    enviar_cliente(socket_conexao, "1")
     return indexador
 
-def pacote_num_palavras(connectionSocket):
+def pacote_num_palavras(socket_conexao):
     imprimir_depuracao("DEPURAÇÃO: Tratando pacote do tipo num_palavras.")
-    enviar_cliente(connectionSocket, f"{len(lista_palavras)}")
+    enviar_cliente(socket_conexao, f"{len(lista_palavras)}")
 
-def pacote_num_chances_fixo(connectionSocket):
+def pacote_num_chances_fixo(socket_conexao):
     imprimir_depuracao("DEPURAÇÃO: Tratando pacote do tipo num_chances_fixo.")
-    enviar_cliente(connectionSocket, f"{NUM_CHANCES_FIXO}")
+    enviar_cliente(socket_conexao, f"{NUM_CHANCES_FIXO}")
 
-def pacote_comecar_jogo(connectionSocket, palavra_escolhida):
+def pacote_comecar_jogo(socket_conexao, palavra_escolhida):
     imprimir_depuracao("DEPURAÇÃO: Tratando pacote do tipo comecar_jogo.")
     if (len(palavra_escolhida)):
         dicio_jogo_atual = {
@@ -120,27 +119,27 @@ def pacote_comecar_jogo(connectionSocket, palavra_escolhida):
             "jogador_perdeu": 0,
             "jogador_ganhou": 0
         }
-        enviar_cliente(connectionSocket, "1")
+        enviar_cliente(socket_conexao, "1")
         return dicio_jogo_atual 
     else:
-        enviar_cliente(connectionSocket, "0")
+        enviar_cliente(socket_conexao, "0")
 
-def pacote_jogo_da_forca(connectionSocket, dicio_jogo_atual):
+def pacote_jogo_da_forca(socket_conexao, dicio_jogo_atual):
     texto_json = json.dumps(dicio_jogo_atual)
-    enviar_cliente(connectionSocket, texto_json)
+    enviar_cliente(socket_conexao, texto_json)
 
-def pacote_tentativa(connectionSocket, dicio_jogo_atual, mensagem, indexador):
+def pacote_tentativa(socket_conexao, dicio_jogo_atual, mensagem, indexador):
     imprimir_depuracao("DEPURAÇÃO: Tratando pacote do tipo tentativa.")
     letra_tentativa = verificar_entrada_valida(mensagem)
 
     if(letra_tentativa == 0):
-        enviar_cliente(connectionSocket, "0")
+        enviar_cliente(socket_conexao, "0")
         return dicio_jogo_atual
 
     palavra_escolhida = lista_palavras[indexador]
         
     if(verificar_letra_repetida(letra_tentativa, dicio_jogo_atual["letras_utilizadas"])):
-        enviar_cliente(connectionSocket, "0")
+        enviar_cliente(socket_conexao, "0")
         return dicio_jogo_atual
 
     dicio_jogo_atual["letras_utilizadas"].append(letra_tentativa)
@@ -159,22 +158,27 @@ def pacote_tentativa(connectionSocket, dicio_jogo_atual, mensagem, indexador):
         if (num_atual_chances <= 0):
             dicio_jogo_atual["jogador_perdeu"] = 1
             dicio_jogo_atual["palavra_censurada"] = palavra_escolhida
-    enviar_cliente(connectionSocket, "1")
+    enviar_cliente(socket_conexao, "1")
     return dicio_jogo_atual
 
-def pacote_encerrar_conexao(connectionSocket):
+def chamada_ou_pacote_encerrar_conexao(socket_conexao):
     imprimir_depuracao("DEPURAÇÃO: Tratando pacote do tipo encerrar_conexao.")
-    raddr = connectionSocket.getpeername()
-    enviar_cliente(connectionSocket, "1")
-    connectionSocket.close()
+    raddr = socket_conexao.getpeername()
+    enviar_cliente(socket_conexao, "1")
+    socket_conexao.close()
     imprimir_depuracao(f"Conexão encerrada com {raddr}.")
 
-def receber_info_completa(connectionSocket):
+def receber_info_completa(socket_conexao):
     mensagem_completa = ""
-    pacote = connectionSocket.recv(1024).decode('utf-8')
-    if not(pacote):
-        return pacote
     while True:
+        try:
+            pacote = socket_conexao.recv(1024).decode('utf-8')
+        except:
+            pacote = ""
+
+        if not(pacote):
+            return pacote
+        
         if ("\n") in pacote:
             mensagem = pacote.split("\n")
             mensagem = mensagem[0]
@@ -182,59 +186,74 @@ def receber_info_completa(connectionSocket):
             return mensagem_completa
         else:
             mensagem_completa += pacote
-        pacote = connectionSocket.recv(1024).decode('utf-8')
 
-def gerenciar_jogo_da_forca(connectionSocket):
+def gerenciar_jogo_da_forca(socket_conexao):
+    socket_conexao.settimeout(120)
     indexador = -1
     dicio_jogo_atual = 0
+    raddr = socket_conexao.getpeername()
     while True:
         imprimir_depuracao("DEPURAÇÃO: Aguardando pacote.")
-        pacote = receber_info_completa(connectionSocket)
+        pacote = receber_info_completa(socket_conexao)
         if not (pacote):
-            imprimir_depuracao("DEPURAÇÃO: Pacote vazio recebido. Encerrando conexão.")
-            connectionSocket.close()
+            imprimir_depuracao(f"DEPURAÇÃO: Pacote vazio recebido. Encerrando conexão com {raddr}.")
+            socket_conexao.close()
             break
 
-        dicio_dados = json.loads(pacote)
+        try:
+            dicio_dados = json.loads(pacote)
+        except:
+            enviar_cliente(socket_conexao, "-1")
+            continue
+        
         imprimir_depuracao(f"DEPURAÇÃO: Pacote recebido: {dicio_dados}.")
         tipo_pacote = dicio_dados.get("tipo")
 
         if(tipo_pacote == "indexador"):
-            indexador = pacote_indexador(connectionSocket, dicio_dados.get("mensagem"))
+            indexador = pacote_indexador(socket_conexao, dicio_dados.get("mensagem"))
             
         elif(tipo_pacote == "num_palavras"):
-            pacote_num_palavras(connectionSocket)
+            pacote_num_palavras(socket_conexao)
 
         elif(tipo_pacote == "num_chances_fixo"):
-            pacote_num_chances_fixo(connectionSocket)
+            pacote_num_chances_fixo(socket_conexao)
 
         elif(tipo_pacote == "comecar_jogo"):
             if (indexador != -1):
-                dicio_jogo_atual = pacote_comecar_jogo(connectionSocket, lista_palavras[indexador])
+                dicio_jogo_atual = pacote_comecar_jogo(socket_conexao, lista_palavras[indexador])
+            else:
+                enviar_cliente(socket_conexao, "-1")
 
         elif(tipo_pacote == "jogo_da_forca"):
             if (dicio_jogo_atual):
-                pacote_jogo_da_forca(connectionSocket, dicio_jogo_atual)
+                pacote_jogo_da_forca(socket_conexao, dicio_jogo_atual)
+            else:
+                enviar_cliente(socket_conexao, "{}")
             
         elif(tipo_pacote == "tentativa"):
             if (dicio_jogo_atual):
-                dicio_jogo_atual = pacote_tentativa(connectionSocket, dicio_jogo_atual, dicio_dados.get("mensagem"), indexador)
-        
+                dicio_jogo_atual = pacote_tentativa(socket_conexao, dicio_jogo_atual, dicio_dados.get("mensagem"), indexador)
+            else:
+                enviar_cliente(socket_conexao, "-1")
+
         elif(tipo_pacote == "encerrar_conexao"):
-            pacote_encerrar_conexao(connectionSocket)
+            chamada_ou_pacote_encerrar_conexao(socket_conexao)
             break
         else:
             print("Pacote inválido.")
+            enviar_cliente(socket_conexao, "-1")
 
 def main():
-    serverPort = 63921
+    porta_servidor = 59800
     socket_servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket_servidor.bind(('', serverPort))
+    socket_servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    socket_servidor.bind(('', porta_servidor))
     socket_servidor.listen(1)
     while True:
         print("Aguardando conexão.")
-        connectionSocket, addr = socket_servidor.accept()
+        socket_conexao, addr = socket_servidor.accept()
         print(f"Conexão iniciada com {addr}.")
-        conexao_cliente = threading.Thread(target=gerenciar_jogo_da_forca, args=(connectionSocket,), daemon=True)
+        conexao_cliente = threading.Thread(target=gerenciar_jogo_da_forca, args=(socket_conexao,), daemon=True)
         conexao_cliente.start()
+
 main()

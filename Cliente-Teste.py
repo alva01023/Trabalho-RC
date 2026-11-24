@@ -78,21 +78,21 @@ def imprimir_informacoes_forca(dicio_jogo_da_forca, letra_repetida, num_chances_
     print(f"Tentativas restantes: {dicio_jogo_da_forca["num_atual_chances"]}")
 
 def receber_info_completa(clientSocket):
-    mensagem_completa = ""
-    pacote = clientSocket.recv(1024).decode('utf-8')
-    if not(pacote):
-        clientSocket.close()
-        sys.exit("Conexão abruptamente encerrada com o servidor. Encerrando o programa.\n")
-    
+    mensagem_completa = ""    
     i = 0
     while True:
+        pacote = clientSocket.recv(1024).decode('utf-8')
+        if not(pacote):
+            clientSocket.close()
+            sys.exit("Conexão abruptamente encerrada com o servidor. O programa foi encerrado.\n")
+        
         if ("\n") in pacote:
             mensagem = pacote.split("\n")
             mensagem = mensagem[0]
             mensagem_completa += mensagem
             
             if(i):
-                imprimir_depuracao("DEPURAÇÃO: A última parte do pacote foi recebida.")
+                imprimir_depuracao(f"DEPURAÇÃO: A última parte do pacote foi recebida.\nPacote: {pacote}")
             else:
                 imprimir_depuracao(f"DEPURAÇÃO: O pacote foi recebido integralmente.\nPacote: {pacote}")
             return mensagem_completa
@@ -100,7 +100,6 @@ def receber_info_completa(clientSocket):
             mensagem_completa += pacote
             imprimir_depuracao(f"DEPURAÇÃO: Uma parte do pacote foi recebida.\nPacote: {pacote}")
             i += 1
-        pacote = clientSocket.recv(1024).decode('utf-8')
 
 def enviar_json_receber_info(clientSocket, dicionario):
     texto_json = json.dumps(dicionario) + "\n"
@@ -115,13 +114,17 @@ def enviar_json_receber_dicio(clientSocket, dicionario):
     mensagem = receber_info_completa(clientSocket)
     return json.loads(mensagem)
 
-def jogo_da_forca(clientSocket):
-    if not(int(enviar_json_receber_info(clientSocket, dicio_comecar_jogo))):
+def jogo_da_forca(clientSocket):  
+    if (enviar_json_receber_info(clientSocket, dicio_comecar_jogo) == "-1"):
         print("Não foi possível acessar a palavra. Tente novamente.")
         return
+    
     num_chances_fixo = int(enviar_json_receber_info(clientSocket, dicio_num_chances_fixo))
     while True:
         jogo_da_forca = enviar_json_receber_dicio(clientSocket, dicio_jogo_da_forca)
+        if not(jogo_da_forca):
+            print("Não foi possível acessar o jogo da forca.")
+            break
 
         if(jogo_da_forca["jogador_ganhou"]):
             print(f"Você ganhou! A palavra era: {jogo_da_forca["palavra_censurada"]}!")
@@ -137,13 +140,19 @@ def jogo_da_forca(clientSocket):
         while True:
             imprimir_informacoes_forca(jogo_da_forca, letra_repetida, num_chances_fixo)
             letra_repetida = ""
+            
             letra_entrada = input("Insira uma letra:\n")
+
             if (bool_letra_repetida(letra_entrada, jogo_da_forca["letras_utilizadas"])):
                 letra_repetida = letra_entrada
                 continue
 
             dicio_tentativa["mensagem"] = letra_entrada
-            enviar_json_receber_info(clientSocket, dicio_tentativa)
+            retorno = enviar_json_receber_info(clientSocket, dicio_tentativa)
+            if(retorno) == "-1":
+                print("É necessário criar um jogo antes de inserir uma tentativa.")
+            elif(retorno) == "0":
+                print("Letra inválida ou repetida. Tente novamente.")
             break
         
 def num_palavras_disponiveis(clientSocket):
@@ -164,7 +173,6 @@ def determinar_indexador(clientSocket, numero_palavras):
         indexador %= numero_palavras
 
         dicio_indexador["mensagem"] = indexador
-        print(dicio_indexador)
 
         if(int(enviar_json_receber_info(clientSocket, dicio_indexador))):
             break
@@ -184,9 +192,9 @@ def opcao_usuario():
         else:
             print("Insira um intervalo válido.")
 
-def estabeler_conexao():
-    serverName = "localhost" #input("Insira o IP do servidor.\n")
-    serverPort = 63921 #int(input("Insira a porta do servidor.\n"))
+def estabelecer_conexao():
+    serverName = input("Insira o IP do servidor.\n")
+    serverPort = input("Insira a porta do servidor.\n")
     
     try:
         serverPort = int(serverPort)
@@ -209,7 +217,7 @@ def estabeler_conexao():
     except ConnectionRefusedError:
         print("A conexão foi recusada. Verifique se a porta referenciada está correta.")
     except:
-        print("Não foi possível se conectar ao servidor.\nVerifique se o IP e o endereço são válidos.")
+        print("Não foi possível se conectar ao servidor.\nVerifique se o IP e a porta são válidos.")
     
     clientSocket.close()
     clientSocket = 0
@@ -224,7 +232,7 @@ def main():
             if (clientSocket):
                 enviar_json_receber_info(clientSocket, dicio_encerrar_conexao)
                 clientSocket.close()
-            print("Encerrando o programa.")
+            print("O programa foi encerrado.")
             break
         elif (opcao == 1):
             if (clientSocket):
@@ -237,8 +245,15 @@ def main():
             if(clientSocket):
                 print("Uma conexão já foi estabelecida.")
             else:
-                clientSocket = estabeler_conexao()
+                clientSocket = estabelecer_conexao()
         else:
             print("Insira uma opção válida.\n")
 
-main()
+try:
+    main()
+except (ConnectionError, TimeoutError):
+    print("Conexão abruptamente encerrada com o servidor. O programa foi encerrado.")
+except (KeyboardInterrupt, EOFError):
+    print("O programa foi encerrado por interrupção.")
+except Exception:
+    print("Um erro inesperado aconteceu. O programa foi encerrado.")
