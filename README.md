@@ -43,9 +43,9 @@ python Cliente-Teste.py
 
 No menu do cliente:
 
-1. Digite o endereço IP informado pelo servidor.
-2. Digite a porta informada pelo servidor.
-3. Digite `2` para estabelecer a conexão.
+1. Digite `2` para estabelecer a conexão.
+2. Digite o endereço IP informado pelo servidor.
+3. Digite a porta informada pelo servidor. 
 4. Aguarde a mensagem **"Conexão estabelecida."**.
 5. Digite `1` para iniciar uma partida.
 
