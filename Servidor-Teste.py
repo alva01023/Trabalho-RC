@@ -243,14 +243,26 @@ def gerenciar_jogo_da_forca(socket_conexao):
             print("Pacote inválido.")
             enviar_cliente(socket_conexao, "-1")
 
+def obter_ip_servidor():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    finally:
+        s.close()
+
+    return ip
+
 def main():
     porta_servidor = 59800
+    ip_servidor = obter_ip_servidor()
     socket_servidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     socket_servidor.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     socket_servidor.bind(('', porta_servidor))
     socket_servidor.listen(1)
     while True:
         print("Aguardando conexão.")
+        print(f"IP: {ip_servidor} e Porta: {porta_servidor}")
         socket_conexao, addr = socket_servidor.accept()
         print(f"Conexão iniciada com {addr}.")
         conexao_cliente = threading.Thread(target=gerenciar_jogo_da_forca, args=(socket_conexao,), daemon=True)
